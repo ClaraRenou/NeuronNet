@@ -62,6 +62,29 @@ size_t Network::random_connect(const double &mean_deg, const double &mean_streng
     return num_links;
 }
 
+std::pair<size_t, double> Network::degree(const size_t& n) const
+{
+	std::pair<size_t, double> degree;
+	std::vector<std::pair<size_t, double> > neighbors_ (neighbors(n));
+	degree.first = neighbors_.size();
+	for (auto neighbor : neighbors_){
+		degree.second += neighbor.second;
+	}
+	
+	return degree;
+}
+
+std::vector<std::pair<size_t, double> > Network::neighbors(const size_t& n) const
+{
+	std::vector<std::pair<size_t, double> > neighbors_;
+	for (auto I = links.lower_bound({n,0}); I != links.end() and ((I -> first).first == n); I++){
+		
+			neighbors_.push_back(std::make_pair((I -> first).second, I -> second));
+	}
+				
+	return neighbors_;
+}
+
 std::vector<double> Network::potentials() const {
     std::vector<double> vals;
     for (size_t nn=0; nn<size(); nn++)
@@ -74,6 +97,36 @@ std::vector<double> Network::recoveries() const {
     for (size_t nn=0; nn<size(); nn++)
         vals.push_back(neurons[nn].recovery());
     return vals;
+}
+
+std::set<size_t> Network::step(const std::vector<double>& thalamInput)
+{
+	std::set<size_t> firingNeurons;
+	for (size_t j(0); j<neurons.size(); ++j){
+		if (neurons[j].firing()){
+			firingNeurons.insert(j);
+			neurons[j].reset();
+		}	
+	}	
+	for (size_t n(0); n < neurons.size(); ++n){
+		std::vector<std::pair<size_t, double> > neighbors_ (neighbors(n));
+		double I(0.0);
+		for (auto neighbor : neighbors_){
+			if (firingNeurons.count(neighbor.first)){
+				size_t i (neighbor.first);
+				if (neurons[i].is_inhibitory())
+					I += neighbor.second;
+				else 
+					I += 0.5*neighbor.second;
+			}
+		}
+		if (neurons[n].is_inhibitory()) I += 0.4*thalamInput[n];
+		else I += 1*thalamInput[n];
+		neurons[n].input(I);
+		neurons[n].step();
+	}
+	
+	return firingNeurons;
 }
 
 void Network::print_params(std::ostream *_out) {
